@@ -47,6 +47,7 @@ func main() {
 	if err != nil {
 		logger.Fatal(ctx, "failed to decode file: %v", err)
 	}
+	ff.CellRegister.SetSheet("Sheet1")
 
 	ctx = goexel.SetFileContext(ctx, ff)
 	plat.Run(ctx, []platform.JobID{skuChecker.GetID(), skuValidator.GetID()})

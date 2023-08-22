@@ -1,6 +1,8 @@
 package platform
 
-import "context"
+import (
+	"context"
+)
 
 const AllJobs JobID = "all jobs syncer"
 
@@ -93,11 +95,12 @@ func (p JobPool) FetchJobDeps(ctx context.Context, job Job, jobMap map[JobID]Job
 		if _, exists := jobMap[depID]; exists {
 			continue
 		}
-		depJob, exists := p.JobMap[depID]
+		depJob, exists := p.Get(depID)
 		if !exists {
 			return nil, JobConfigurationError
 		}
 
+		jobMap[depID] = depJob
 		jobMap, err = p.FetchJobDeps(ctx, depJob, jobMap)
 		if err != nil {
 			return nil, err
@@ -168,9 +171,11 @@ func (g graph) hasCycles(ind JobID) bool {
 func (g graph) TopSort() (res []Job) {
 	res = make([]Job, 0, len(g))
 	for _, point := range g {
-		return g.topSort(point.Job.GetID(), res)
+		if point.color != black {
+			res = g.topSort(point.Job.GetID(), res)
+		}
 	}
-	return nil
+	return res
 }
 
 func (g graph) topSort(ind JobID, jobs []Job) []Job {

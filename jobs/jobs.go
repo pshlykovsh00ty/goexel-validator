@@ -2,6 +2,7 @@ package jobs
 
 import (
 	"context"
+	"fmt"
 
 	goxlsx "gitlab.ozon.ru/express/platform/lib/go-xlsx"
 	"gitlab.ozon.ru/validator/goexel"
@@ -35,12 +36,14 @@ type SkuChecker struct {
 func (j *SkuChecker) Run(ctx context.Context) (err error) {
 	file := goexel.GetFileFromContext[Entry](ctx)
 
-	checkerPlatformRes := j.Dependencies["СКУ В МАПЕ ЧЕКЕР"].Recv(ctx)
+	checkerPlatformRes, ok := j.Dependencies["Валидный ли Ску"].Recv(ctx)
+	if !ok {
+		return fmt.Errorf("error happened")
+	}
 	if checkerPlatformRes.Err != nil {
 		// можно и ошибку вернуть если что)
 		return nil
 	}
-
 	checkerRes := checkerPlatformRes.Res.(IsSkuValidRes)
 
 	for i, row := range file.Table {
@@ -81,10 +84,10 @@ type IsSkuValid struct {
 }
 
 func (j *IsSkuValid) Run(ctx context.Context) (err error) {
+
 	file := goexel.GetFileFromContext[Entry](ctx)
 
 	res := IsSkuValidRes{Res: make([]bool, len(file.Table))}
-
 	for i, row := range file.Table {
 		if row.ItemID.IsEmpty() {
 			file.CellRegister.RegisterCellValueByString([]string{"Пустой Ску."}, row.Comment)

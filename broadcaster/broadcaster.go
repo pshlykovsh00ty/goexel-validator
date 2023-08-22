@@ -30,15 +30,15 @@ func (b *Broadcaster[T]) Send(ctx context.Context, obj T) {
 	}
 }
 
-func (b *Broadcaster[T]) Recv(ctx context.Context) *T {
+func (b *Broadcaster[T]) Recv(ctx context.Context) (*T, bool) {
 	select {
 	case <-ctx.Done():
-		return nil
-	case obj, closed := <-b.Ch:
-		if closed {
-			return nil
+		return nil, false
+	case obj, ok := <-b.Ch:
+		if !ok {
+			return nil, false
 		}
-		return &obj
+		return &obj, true
 	}
 }
 

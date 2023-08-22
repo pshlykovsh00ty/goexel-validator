@@ -23,7 +23,7 @@ type Copier[T any] interface {
 
 type Broadcaster[T any] interface {
 	Copier[Broadcaster[T]]
-	Recv(ctx context.Context) *T
+	Recv(ctx context.Context) (*T, bool)
 	AddSubs(int32)
 	Send(context.Context, T)
 	Close()
@@ -70,14 +70,11 @@ func (p *Platform) AddJob(j Job) error {
 }
 
 func (p Platform) Run(ctx context.Context, jobs []JobID) error {
-
 	pipeLine, err := p.jobPool.CreatePipeline(ctx, jobs)
 	if err != nil {
 		return errors.Wrap(err, "failed to create pipeline")
 	}
-
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
-
-	return pipeLine.Start(ctx, cancel, p.ConcurrencyLimit)
+	return pipeLine.Start(ctx, p.ConcurrencyLimit)
 }
