@@ -3,7 +3,6 @@ package platform
 import (
 	"context"
 	"fmt"
-	"sync/atomic"
 
 	"gitlab.ozon.ru/platform/errors"
 	"gitlab.ozon.ru/platform/tracer-go/logger"
@@ -19,8 +18,9 @@ type Pipeline struct {
 
 // Start - стартует весь пайплайн из джоб
 func (p *Pipeline) Start(ctx context.Context, concurrencyLimit int32) (fatalErr error) {
-	// показывает сколько в данный момент времени выполняется джоб
-	jobsOnline := atomic.Int32{}
+	// rate limiter
+	// также показывает сколько в данный момент времени выполняется джоб
+	jobsOnline := make(chan struct{}, concurrencyLimit)
 	// канал в который воркер пулу передаются джобы для их выполнения
 	starter := make(chan Job)
 
@@ -35,18 +35,18 @@ func (p *Pipeline) Start(ctx context.Context, concurrencyLimit int32) (fatalErr 
 					logger.Errorf(ctx, "job panicked: %v", err)
 					fatalErr = fmt.Errorf("%v", err)
 					cancel()
-					jobsOnline.Add(-1)
+					<-jobsOnline
 				}
 			}()
 			for {
 				select {
 				case job, ok := <-starter:
 					if !ok {
-						jobsOnline.Add(-1)
+						<-jobsOnline
 						return
 					}
 					err := job.Run(ctx)
-					jobsOnline.Add(-1)
+					<-jobsOnline
 					if err != nil {
 						if errors.Is(err, ErrFatal) {
 							logger.Errorf(ctx, "fatal validation error")
@@ -62,24 +62,25 @@ func (p *Pipeline) Start(ctx context.Context, concurrencyLimit int32) (fatalErr 
 			}
 		}()
 	}
-	for _, job := range p.sortedJobs {
-		for jobsOnline.Load() >= concurrencyLimit {
-			if ctx.Err() != nil {
-				if fatalErr != nil {
-					return errors.Wrap(fatalErr, ctx.Err().Error())
-				}
-				return ctx.Err()
-			}
-		}
 
+	// rate limiting
+	for _, job := range p.sortedJobs {
+		select {
+		case <-ctx.Done():
+			if fatalErr != nil {
+				return errors.Wrap(fatalErr, ctx.Err().Error())
+			}
+			return ctx.Err()
+		case jobsOnline <- struct{}{}:
+		}
+		fmt.Println(len(jobsOnline))
 		select {
 		case starter <- job:
-			jobsOnline.Add(1)
 		case <-ctx.Done():
 		}
 	}
 
-	for jobsOnline.Load() > 0 {
+	for len(jobsOnline) != 0 {
 	}
 	return fatalErr
 }

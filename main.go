@@ -32,10 +32,21 @@ func main() {
 			505028007:  {},
 		}}
 	plat.AddJob(skuChecker)
+
 	skuValidator := &jobs.IsSkuValid{
 		JobWrapper: &platform.JobWrapper{ResChan: &broadcaster.Broadcaster[platform.JobResult]{}},
 	}
 	plat.AddJob(skuValidator)
+
+	dataValidator := &jobs.DataValidation{
+		JobWrapper: &platform.JobWrapper{ResChan: &broadcaster.Broadcaster[platform.JobResult]{}},
+	}
+	plat.AddJob(dataValidator)
+
+	funValidator := &jobs.FunValidation{
+		JobWrapper: &platform.JobWrapper{ResChan: &broadcaster.Broadcaster[platform.JobResult]{}},
+	}
+	plat.AddJob(funValidator)
 
 	f, err := os.Open("/Users/pshlykov/Downloads/9ffda052-bfb5-409f-9b3c-b00f447d9400.xlsx")
 	if err != nil {
@@ -50,7 +61,7 @@ func main() {
 	ff.CellRegister.SetSheet("Sheet1")
 
 	ctx = goexel.SetFileContext(ctx, ff)
-	plat.Run(ctx, []platform.JobID{skuChecker.GetID(), skuValidator.GetID()})
+	plat.Run(ctx, []platform.JobID{funValidator.GetID(), skuChecker.GetID()})
 
 	newF := ff.CellRegister.GetFileBytes()
 	os.WriteFile("/Users/pshlykov/Downloads/testing.xlsx", newF, 0666)

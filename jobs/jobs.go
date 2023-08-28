@@ -3,6 +3,7 @@ package jobs
 import (
 	"context"
 	"fmt"
+	"time"
 
 	goxlsx "gitlab.ozon.ru/express/platform/lib/go-xlsx"
 	"gitlab.ozon.ru/validator/goexel"
@@ -51,27 +52,26 @@ type SkuChecker struct {
 }
 
 func (j *SkuChecker) Run(ctx context.Context) (err error) {
-	file := goexel.GetFileFromContext[Entry](ctx)
 
 	checkerResChan, ok := j.Dependencies["Валидный ли Ску"]
 	if !ok {
 		return fmt.Errorf("%w: no checker chanel", platform.ErrFatal)
 	}
 
-	return platform.RunByLine[Entry](ctx, j.JobWrapper, func(c context.Context, line int, row *Entry) platform.JobResult {
+	return platform.RunByLine[Entry](ctx, j.JobWrapper, func(c context.Context, register *goexel.FileCellRegisterer, row *Entry) platform.JobResult {
 		checkerRes := <-checkerResChan
 
 		if checkerRes.Err != nil {
 			return platform.JobResult{Err: platform.ErrSkipped}
 		}
 		if isValidSKU := checkerRes.Res.(bool); !isValidSKU {
-			file.CellRegister.RegisterCellValueByString([]string{"Знаю что 1."}, row.Comment)
+			register.RegisterCellValueByString([]string{"Знаю что 1."}, row.Comment)
 			return platform.JobResult{Err: platform.ErrSkipped}
 		}
 
 		_, exists := j.Exists[row.ItemID.Value]
 		if !exists {
-			file.CellRegister.RegisterCellValueByString([]string{"СКУ НЕ В МАПЕ."}, row.Comment)
+			register.RegisterCellValueByString([]string{"СКУ НЕ В МАПЕ."}, row.Comment)
 		}
 		return platform.JobResult{Res: exists}
 	})
@@ -100,12 +100,13 @@ type IsSkuValid struct {
 
 func (j *IsSkuValid) Run(ctx context.Context) (err error) {
 
-	file := goexel.GetFileFromContext[Entry](ctx)
+	return platform.RunByLine[Entry](ctx, j.JobWrapper, func(c context.Context, register *goexel.FileCellRegisterer, row *Entry) platform.JobResult {
 
-	return platform.RunByLine[Entry](ctx, j.JobWrapper, func(c context.Context, line int, row *Entry) platform.JobResult {
+		time.Sleep(20 * time.Millisecond)
+
 		isEmpty := row.ItemID.IsEmpty() || row.ItemID.Value == 1
 		if isEmpty {
-			file.CellRegister.RegisterCellValueByString([]string{"Пустой Ску."}, row.Comment)
+			register.RegisterCellValueByString([]string{"Пустой Ску."}, row.Comment)
 		}
 		return platform.JobResult{
 			Res: !isEmpty,
@@ -123,6 +124,111 @@ func (j *IsSkuValid) GetID() platform.JobID {
 
 func (j *IsSkuValid) Create() platform.Job {
 	return &IsSkuValid{
+		JobWrapper: j.JobWrapper.Create(),
+	}
+}
+
+// ---------------------------------------------------------------- Data validation ----------------------------------------------------------------
+
+type DataValidation struct {
+	*platform.JobWrapper
+}
+
+func (j *DataValidation) Run(ctx context.Context) (err error) {
+
+	return platform.RunByLine[Entry](ctx, j.JobWrapper, func(c context.Context, register *goexel.FileCellRegisterer, row *Entry) platform.JobResult {
+
+		time.Sleep(20 * time.Millisecond)
+		rowNumber := row.PromoName.GetRowNumber()
+
+		if !row.PromoDateFrom.IsValid() {
+			register.RegisterCommentByRow(fmt.Sprintf("Невалидное поле Дата начала %s", row.PromoDateFrom.Value), rowNumber)
+			return platform.JobResult{Res: false}
+		}
+		if !row.PromoDateTo.IsValid() {
+			register.RegisterCommentByRow(fmt.Sprintf("Невалидное поле Дата окончания %s", row.PromoDateTo.Value), rowNumber)
+			return platform.JobResult{Res: false}
+		}
+
+		if row.PromoDateTo.Value.Before(row.PromoDateFrom.Value) {
+			register.RegisterCommentByRow("Дата начала промо не может быть после даты окончания", rowNumber)
+			return platform.JobResult{Res: false}
+		}
+		return platform.JobResult{
+			Res: true,
+		}
+	})
+}
+
+func (j *DataValidation) GetDepIDs() []platform.JobID {
+	return nil
+}
+
+func (j *DataValidation) GetID() platform.JobID {
+	return "Влидация дат начала и конца промо акции"
+}
+
+func (j *DataValidation) Create() platform.Job {
+	return &DataValidation{
+		JobWrapper: j.JobWrapper.Create(),
+	}
+}
+
+// ---------------------------------------------------------------- Just for fun validation ----------------------------------------------------------------
+
+type FunValidation struct {
+	*platform.JobWrapper
+}
+
+func (j *FunValidation) Run(ctx context.Context) (err error) {
+
+	isValidSkuChan, ok := j.Dependencies["Валидный ли Ску"]
+	if !ok {
+		return fmt.Errorf("%w: no checker chanel", platform.ErrFatal)
+	}
+
+	dataChekerChan, ok := j.Dependencies["Влидация дат начала и конца промо акции"]
+	if !ok {
+		return fmt.Errorf("%w: no date validation chanel", platform.ErrFatal)
+	}
+
+	return platform.RunByLine[Entry](ctx, j.JobWrapper, func(c context.Context, register *goexel.FileCellRegisterer, row *Entry) platform.JobResult {
+
+		isValidSkuRes := <-isValidSkuChan
+		if isValidSkuRes.Err != nil {
+			return isValidSkuRes
+		}
+		isValidSku := isValidSkuRes.Res.(bool)
+
+		if isValidSku {
+			isVaidDataRes := <-dataChekerChan
+			if isVaidDataRes.Err != nil {
+				return isVaidDataRes
+			}
+			if isValidData := isVaidDataRes.Res.(bool); isValidData {
+				register.RegisterCellValueByString([]string{"Фановая валидация нашла валидную дату)."}, row.SoftErrors)
+				return platform.JobResult{
+					Res: true,
+				}
+			}
+		}
+
+		return platform.JobResult{
+			Res: false,
+		}
+	})
+}
+
+func (j *FunValidation) GetDepIDs() []platform.JobID {
+	return []platform.JobID{"Влидация дат начала и конца промо акции", "Валидный ли Ску"}
+}
+
+func (j *FunValidation) GetID() platform.JobID {
+	return "Проверяем двойные зависимости"
+}
+
+func (j *FunValidation) Create() platform.Job {
+	return &FunValidation{
 		JobWrapper: j.JobWrapper.Create(),
 	}
 }

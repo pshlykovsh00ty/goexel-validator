@@ -41,10 +41,10 @@ func (j *JobWrapper) Create() (res *JobWrapper) {
 	return res
 }
 
-func RunByLine[T any](ctx context.Context, jw *JobWrapper, lineRunner func(c context.Context, line int, row *T) JobResult) error {
+func RunByLine[T any](ctx context.Context, jw *JobWrapper, lineRunner func(c context.Context, register *goexel.FileCellRegisterer, row *T) JobResult) error {
 	file := goexel.GetFileFromContext[T](ctx)
-	for line, row := range file.Table {
-		res := lineRunner(ctx, line, row)
+	for _, row := range file.Table {
+		res := lineRunner(ctx, file.CellRegister, row)
 		if res.Err != nil {
 			if errors.Is(res.Err, ErrFatal) {
 				return res.Err
