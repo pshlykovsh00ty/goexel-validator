@@ -11,20 +11,21 @@ var (
 	JobConfigurationError       = errors.New("job configuration error")
 	CircleDependencyError       = errors.New("there is circle dependency error")
 	InvalidDependencyTypesError = errors.New("job type with higher number can't be in dependence of a lower type number job")
+
+	ErrSkipped = errors.New("skipped this line")
 )
 
 func init() {
 	// добавляем джоюы и потом сообщаем что таккая уже есть или еще лучше регистрируем куда-нидуь в регистратор джоб
 }
 
-type Copier[T any] interface {
-	Copy() T
+type Creator[T any] interface {
+	Create() T
 }
 
 type Broadcaster[T any] interface {
-	Copier[Broadcaster[T]]
-	Recv(ctx context.Context) (*T, bool)
-	AddSubs(int32)
+	Creator[Broadcaster[T]]
+	Sub() chan T
 	Send(context.Context, T)
 	Close()
 }
@@ -44,11 +45,12 @@ type Runner interface {
 
 type Job interface {
 	Runner
-	SetDepInfo(jobs map[JobID]Broadcaster[JobResult], subs int32)
-	GetResultChan() Broadcaster[JobResult]
+	Subscribe() chan JobResult
+	SetDependencyChan(depID JobID, ch chan JobResult)
+
 	// Чтобы правильно сделать широковещательную рассылку
 	// сделаем фабрику раннеров тк есть Create у раннера
-	Copier[Job]
+	Creator[Job]
 }
 
 type Platform struct {

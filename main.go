@@ -21,7 +21,7 @@ func main() {
 	})
 	// доделать
 	skuChecker := &jobs.SkuChecker{
-		JobWrapper: platform.NewJobWrapper(broadcaster.NewBroadcaster[platform.JobResult](1000)),
+		JobWrapper: &platform.JobWrapper{ResChan: &broadcaster.Broadcaster[platform.JobResult]{}},
 		Exists: map[int64]struct{}{
 			326585538:  {},
 			327110952:  {},
@@ -33,7 +33,7 @@ func main() {
 		}}
 	plat.AddJob(skuChecker)
 	skuValidator := &jobs.IsSkuValid{
-		JobWrapper: platform.NewJobWrapper(broadcaster.NewBroadcaster[platform.JobResult](1000)),
+		JobWrapper: &platform.JobWrapper{ResChan: &broadcaster.Broadcaster[platform.JobResult]{}},
 	}
 	plat.AddJob(skuValidator)
 

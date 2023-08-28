@@ -6,59 +6,37 @@ import (
 	"gitlab.ozon.ru/validator/platform"
 )
 
+const buffer int = 1024
+
 type Broadcaster[T any] struct {
-	Subscribers int32
-	buf         int
-	Ch          chan T
+	casts []chan T
+	buf   int
 }
 
-func NewBroadcaster[T any](buf int) *Broadcaster[T] {
-	return &Broadcaster[T]{
-		Ch:  make(chan T, buf),
-		buf: buf,
-	}
-}
-
-func (b *Broadcaster[T]) AddSubs(subs int32) {
-	b.Subscribers += subs
+func (b *Broadcaster[T]) Sub() chan T {
+	ch := make(chan T, b.buf)
+	b.casts = append(b.casts, ch)
+	return ch
 }
 
 func (b *Broadcaster[T]) Send(ctx context.Context, obj T) {
-	sendingLeft := b.Subscribers
-	for ; sendingLeft > -1; sendingLeft-- {
-		b.Ch <- obj
-	}
-}
-
-func (b *Broadcaster[T]) Recv(ctx context.Context) (*T, bool) {
-	select {
-	case <-ctx.Done():
-		return nil, false
-	case obj, ok := <-b.Ch:
-		if !ok {
-			return nil, false
+	for _, ch := range b.casts {
+		select {
+		case <-ctx.Done():
+			continue
+		case ch <- obj:
 		}
-		return &obj, true
-	}
-}
-
-func (b *Broadcaster[T]) TryRecv() (*T, bool) {
-	select {
-	case obj := <-b.Ch:
-		return &obj, true
-	default:
-		return nil, false
 	}
 }
 
 func (b *Broadcaster[T]) Close() {
-	close(b.Ch)
+	for _, ch := range b.casts {
+		close(ch)
+	}
 }
 
-func (b *Broadcaster[T]) Copy() platform.Broadcaster[T] {
+func (b *Broadcaster[T]) Create() platform.Broadcaster[T] {
 	return &Broadcaster[T]{
-		Ch:          make(chan T, b.buf),
-		buf:         b.buf,
-		Subscribers: b.Subscribers,
+		buf: buffer,
 	}
 }

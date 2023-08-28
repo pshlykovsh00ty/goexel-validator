@@ -30,9 +30,8 @@ const (
 )
 
 type File[T any] struct {
-	Table           []*T
-	CellRegister    *FileCellRegisterer
-	CommentRegister *goxlsx.ValidationRegister
+	Table        []*T
+	CellRegister *FileCellRegisterer
 }
 
 func NewFile[T any](file []byte) (*File[T], error) {
@@ -50,13 +49,12 @@ func NewFile[T any](file []byte) (*File[T], error) {
 	}
 
 	decoder.AddRegister(commentRegister)
-	resArr := make([]*T, 0, 1000)
+	resArr := make([]*T, 0)
 	decoder.Decode(&resArr)
 
 	return &File[T]{
-		Table:           resArr,
-		CellRegister:    register,
-		CommentRegister: commentRegister,
+		Table:        resArr,
+		CellRegister: register,
 	}, nil
 }
 

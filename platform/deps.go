@@ -16,7 +16,7 @@ func (p JobPool) Get(jobID JobID) (Job, bool) {
 	if !exists {
 		return nil, false
 	}
-	return job.Copy(), true
+	return job.Create(), true
 }
 
 // CreatePipeline - из id джоб собирает цепочку готовых к запуску джоб
@@ -62,24 +62,14 @@ func (p JobPool) CreatePipeline(ctx context.Context, jobIDs []JobID) (res *Pipel
 	// (можно будет посчитать их максимальное кол-во еще, короче давайте оставим пж, не пожалеем)
 	sortedJobWrappers := jobGraph.TopSort()
 
-	// Для правильных широковещательных рассылок нужно посчитать кол-во подписчиков
-	// на каждую джобу
-	subMap := make(map[JobID]int32, len(jobs))
-	for _, job := range jobs {
-		for _, depID := range job.GetDepIDs() {
-			subMap[depID]++
-		}
-	}
-
 	// всем джобам надо передавать копии нынешнего пайплайна джоб и каналов их связи
 	for _, job := range sortedJobWrappers {
 		depIDs := job.GetDepIDs()
-		resChanMap := make(map[JobID]Broadcaster[JobResult], len(depIDs))
 		for _, depID := range depIDs {
 			dep := jobs[depID]
-			resChanMap[depID] = dep.GetResultChan()
+			depChan := dep.Subscribe()
+			job.SetDependencyChan(depID, depChan)
 		}
-		job.SetDepInfo(resChanMap, subMap[job.GetID()])
 	}
 	return &Pipeline{sortedJobs: sortedJobWrappers}, nil
 }

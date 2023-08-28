@@ -20,11 +20,28 @@ type Entry struct {
 	WarehouseID    goxlsx.Int64  `xlsx:"Склад"           xlsx-validation:"gtz"`
 	Comment        goxlsx.String `xlsx:"Комментарий"`
 	IsDelete       goxlsx.Bool
-}
 
-func init() {
-	// add to the platform map
-	// platform.JobMap[]
+	PromoMechanics          goxlsx.String  `xlsx:"Промо механика"`
+	Coefficient             goxlsx.Float64 `xlsx:"Коэффициент"`
+	UseInPromo              goxlsx.Bool    `xlsx:"Дублирование из тематики в промо" xlsx-format:"Да"`
+	Price                   goxlsx.Float64 `xlsx:"Закупочная регулярная цена без НДС, руб" xlsx-validation:"gtez"`
+	PromoPrice              goxlsx.Float64 `xlsx:"Закупка в промо без НДС, руб"            xlsx-validation:"gtez"`
+	NDSRate                 goxlsx.Int32   `xlsx:"Ставка НДС, %"`
+	PromoPriceListDateFrom  goxlsx.Date    `xlsx:"Начало действия закупочной цены в промо"`
+	PromoPriceListDateTo    goxlsx.Date    `xlsx:"Окончание действия закупочной цены в промо"`
+	DiscountOffPercent      goxlsx.Float64 `xlsx:"Скидка off, %"`
+	DiscountOffRUR          goxlsx.Float64 `xlsx:"Скидка off, руб"                         xlsx-validation:"gtz"`
+	Volume                  goxlsx.Int32   `xlsx:"Объем"                          xlsx-validation:"gtz"`
+	PromoType               goxlsx.String  `xlsx:"Тип промо"   xlsx-validation:"required"`
+	PurchaseType            goxlsx.String  `xlsx:"Тип Закупки"   xlsx-validation:"required"`
+	SupplierCompensation    goxlsx.String  `xlsx:"Компенсация поставщика"`
+	SupplierCompensationSum goxlsx.Float64 `xlsx:"Сумма компенсации от поставщика в рублях"   xlsx-validation:"gtez"`
+	RecommendedPrice        goxlsx.Float64 `xlsx:"Рекомендованные цены от КМ"   xlsx-validation:"gtez"`
+	SamplingObligation      goxlsx.Bool    `xlsx:"Обязательство выборки" xlsx-format:"Да"`
+	PositionAttribute       goxlsx.String  `xlsx:"Признак позиции"   xlsx-validation:"required"`
+	PriceListID             goxlsx.String  `xlsx:"ID прайс-листа"`
+	JiraID                  goxlsx.String  `xlsx:"Заявка в JIRA"`
+	SoftErrors              goxlsx.String  `xlsx:"Ошибка"` //TODO нейминг можно поправить уже после рефакторинга, сейчас тут попадаются не только "не строгие" ошибки
 }
 
 type SkuChecker struct {
@@ -36,26 +53,28 @@ type SkuChecker struct {
 func (j *SkuChecker) Run(ctx context.Context) (err error) {
 	file := goexel.GetFileFromContext[Entry](ctx)
 
-	checkerPlatformRes, ok := j.Dependencies["Валидный ли Ску"].Recv(ctx)
+	checkerResChan, ok := j.Dependencies["Валидный ли Ску"]
 	if !ok {
-		return fmt.Errorf("error happened")
+		return fmt.Errorf("%w: no checker chanel", platform.ErrFatal)
 	}
-	if checkerPlatformRes.Err != nil {
-		// можно и ошибку вернуть если что)
-		return nil
-	}
-	checkerRes := checkerPlatformRes.Res.(IsSkuValidRes)
 
-	for i, row := range file.Table {
-		if checkerRes.Res[i] {
-			if _, exists := j.Exists[row.ItemID.Value]; !exists {
-				file.CellRegister.RegisterCellValueByString([]string{"СКУ НЕ В МАПЕ."}, row.Comment)
-			}
+	return platform.RunByLine[Entry](ctx, j.JobWrapper, func(c context.Context, line int, row *Entry) platform.JobResult {
+		checkerRes := <-checkerResChan
+
+		if checkerRes.Err != nil {
+			return platform.JobResult{Err: platform.ErrSkipped}
 		}
-	}
+		if isValidSKU := checkerRes.Res.(bool); !isValidSKU {
+			file.CellRegister.RegisterCellValueByString([]string{"Знаю что 1."}, row.Comment)
+			return platform.JobResult{Err: platform.ErrSkipped}
+		}
 
-	j.Done(ctx, platform.JobResult{})
-	return nil
+		_, exists := j.Exists[row.ItemID.Value]
+		if !exists {
+			file.CellRegister.RegisterCellValueByString([]string{"СКУ НЕ В МАПЕ."}, row.Comment)
+		}
+		return platform.JobResult{Res: exists}
+	})
 }
 
 func (j *SkuChecker) GetDepIDs() []platform.JobID {
@@ -66,18 +85,14 @@ func (j *SkuChecker) GetID() platform.JobID {
 	return "СКУ В МАПЕ ЧЕКЕР"
 }
 
-func (j *SkuChecker) Copy() platform.Job {
+func (j *SkuChecker) Create() platform.Job {
 	return &SkuChecker{
-		JobWrapper: j.JobWrapper.Copy(),
+		JobWrapper: j.JobWrapper.Create(),
 		Exists:     j.Exists,
 	}
 }
 
 // ---------------------------------------------------------------- IsSkuValid ----------------------------------------------------------------
-
-type IsSkuValidRes struct {
-	Res []bool
-}
 
 type IsSkuValid struct {
 	*platform.JobWrapper
@@ -87,17 +102,15 @@ func (j *IsSkuValid) Run(ctx context.Context) (err error) {
 
 	file := goexel.GetFileFromContext[Entry](ctx)
 
-	res := IsSkuValidRes{Res: make([]bool, len(file.Table))}
-	for i, row := range file.Table {
-		if row.ItemID.IsEmpty() {
+	return platform.RunByLine[Entry](ctx, j.JobWrapper, func(c context.Context, line int, row *Entry) platform.JobResult {
+		isEmpty := row.ItemID.IsEmpty() || row.ItemID.Value == 1
+		if isEmpty {
 			file.CellRegister.RegisterCellValueByString([]string{"Пустой Ску."}, row.Comment)
-			continue
 		}
-		res.Res[i] = true
-	}
-
-	j.Done(ctx, platform.JobResult{Res: res})
-	return nil
+		return platform.JobResult{
+			Res: !isEmpty,
+		}
+	})
 }
 
 func (j *IsSkuValid) GetDepIDs() []platform.JobID {
@@ -108,8 +121,8 @@ func (j *IsSkuValid) GetID() platform.JobID {
 	return "Валидный ли Ску"
 }
 
-func (j *IsSkuValid) Copy() platform.Job {
+func (j *IsSkuValid) Create() platform.Job {
 	return &IsSkuValid{
-		JobWrapper: j.JobWrapper.Copy(),
+		JobWrapper: j.JobWrapper.Create(),
 	}
 }
