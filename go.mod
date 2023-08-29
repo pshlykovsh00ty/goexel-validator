@@ -19,7 +19,7 @@ require (
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/mattn/go-colorable v0.1.9 // indirect
 	github.com/mattn/go-isatty v0.0.14 // indirect
-	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
+	github.com/matttproud/golang_protobuf_extensions v1.0.2 // indirect
 	github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826 // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/prometheus/client_golang v1.13.0 // indirect
@@ -34,8 +34,9 @@ require (
 	github.com/xuri/efp v0.0.0-20220407160117-ad0f7a785be8 // indirect
 	github.com/xuri/nfp v0.0.0-20220409054826-5e722a1d9e22 // indirect
 	gitlab.ozon.ru/platform/circuit/v3 v3.1.2-0.20210115121924-4b7fb14c90d5 // indirect
+	gitlab.ozon.ru/platform/errgroup/v2 v2.2.1 // indirect
 	gitlab.ozon.ru/platform/meshmd/v2 v2.6.1 // indirect
-	gitlab.ozon.ru/platform/metrics-go v1.6.5 // indirect
+	gitlab.ozon.ru/platform/metrics-go v1.6.7 // indirect
 	gitlab.ozon.ru/platform/mw/opts v1.0.0 // indirect
 	gitlab.ozon.ru/platform/scratch/pkg/opts v1.0.0 // indirect
 	gitlab.ozon.ru/platform/warden/client v1.16.4 // indirect
@@ -44,6 +45,7 @@ require (
 	go.uber.org/zap v1.24.0 // indirect
 	golang.org/x/crypto v0.0.0-20220408190544-5352b0902921 // indirect
 	golang.org/x/exp v0.0.0-20200224162631-6cc2880d07d6 // indirect
+	golang.org/x/sync v0.1.0 // indirect
 	golang.org/x/sys v0.6.0 // indirect
 	golang.org/x/text v0.8.0 // indirect
 	google.golang.org/protobuf v1.30.0 // indirect

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	colorfmt "github.com/fatih/color"
+	"gitlab.ozon.ru/platform/errgroup/v2"
 	"gitlab.ozon.ru/platform/errors"
 	"gitlab.ozon.ru/platform/tracer-go/logger"
 )
@@ -56,14 +57,10 @@ type Pipeline struct {
 }
 
 // Start - стартует весь пайплайн из джоб
-func (p *Pipeline) Start(ctx context.Context) (fatalErr error) {
-
-	resultChan := make(chan struct{})
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+func (p *Pipeline) Start(ctx context.Context) (err error) {
 
 	for _, wjob := range p.wJobs {
-		if err := wjob.Run(ctx); err != nil {
+		if err = wjob.Run(ctx); err != nil {
 			if errors.Is(err, ErrFatal) {
 				logger.Errorf(ctx, "fatal validation error: %v", err)
 				return
@@ -72,38 +69,23 @@ func (p *Pipeline) Start(ctx context.Context) (fatalErr error) {
 		}
 	}
 
-	// пускаем пул с некоторым ограничением по горутинам
-	for _, job := range p.rJobs {
-		go func(job Job) {
-			defer func() {
-				if err := recover(); err != nil {
-					logger.Errorf(ctx, "job panicked: %v", err)
-					fatalErr = fmt.Errorf("%v", err)
-					cancel()
-				}
-				resultChan <- struct{}{}
-			}()
+	group, ctx := errgroup.WithContext(ctx)
 
+	for _, job := range p.rJobs {
+		job := job
+		group.Go(func() error {
 			if err := job.Run(ctx); err != nil {
 				if errors.Is(err, ErrFatal) {
 					logger.Errorf(ctx, "fatal validation error: %v", err)
-					fatalErr = err
-					cancel()
-					return
+					return err
 				}
 				logger.Errorf(ctx, "job error: %v", err)
 			}
-		}(job)
+			return nil
+		})
 	}
 
-	for range p.rJobs {
-		select {
-		case <-resultChan:
-		case <-ctx.Done():
-			return errors.Wrapf(fatalErr, "validation canceled: %v", ctx.Err())
-		}
-	}
-	return fatalErr
+	return group.Wait()
 }
 
 // ConfigurationError - ошибка конфигурации

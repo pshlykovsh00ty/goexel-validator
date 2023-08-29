@@ -192,6 +192,8 @@ github.com/mattn/go-isatty v0.0.14 h1:yVuAays6BHfxijgZPzw+3Zlu5yQgKGP2/hcQbHb7S9
 github.com/mattn/go-isatty v0.0.14/go.mod h1:7GGIvUiUoEMVVmxf/4nioHXj79iQHKdU27kJ6hsGG94=
 github.com/matttproud/golang_protobuf_extensions v1.0.1 h1:4hp9jkHxhMHkqkrB3Ix0jegS5sx/RkqARlsWZ6pIwiU=
 github.com/matttproud/golang_protobuf_extensions v1.0.1/go.mod h1:D8He9yQNgCq6Z5Ld7szi9bcBfOoFv/3dc6xSMkL2PC0=
+github.com/matttproud/golang_protobuf_extensions v1.0.2 h1:hAHbPm5IJGijwng3PWk09JkG9WeqChjprR5s9bBZ+OM=
+github.com/matttproud/golang_protobuf_extensions v1.0.2/go.mod h1:BSXmuO+STAnVfrANrmjBb36TMTDstsz7MSK+HVaYKv4=
 github.com/modern-go/concurrent v0.0.0-20180228061459-e0a39a4cb421/go.mod h1:6dJC0mAP4ikYIbvyc7fijjWJddQyLn8Ig3JB5CqoB9Q=
 github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd/go.mod h1:6dJC0mAP4ikYIbvyc7fijjWJddQyLn8Ig3JB5CqoB9Q=
 github.com/modern-go/reflect2 v0.0.0-20180701023420-4b7aa43c6742/go.mod h1:bx2lNnkwVCuqBIxFjflWJWanXIb3RllmbCylyMrvgv0=
@@ -297,12 +299,16 @@ gitlab.ozon.ru/express/platform/lib/go-xlsx v1.0.14 h1:rcKjjBUYTLtLgk78DRfSdCDHa
 gitlab.ozon.ru/express/platform/lib/go-xlsx v1.0.14/go.mod h1:WQX0yHgG5OOzW2YO4OMgKM+z6oPYisVgxffAau+xwCQ=
 gitlab.ozon.ru/platform/circuit/v3 v3.1.2-0.20210115121924-4b7fb14c90d5 h1:rMqPj2uJJLQOrFpPAHjDr8mQJTo+z9ASQK2KxB3lQnA=
 gitlab.ozon.ru/platform/circuit/v3 v3.1.2-0.20210115121924-4b7fb14c90d5/go.mod h1:udkruAUnIAqFzqPe5KJgPbIYCAVeO05CtBJQV3NFEcQ=
+gitlab.ozon.ru/platform/errgroup/v2 v2.2.1 h1:gqdbzLqNi5BTvJPVaam+YA6d6g+yX1KX4iZEq69rzjA=
+gitlab.ozon.ru/platform/errgroup/v2 v2.2.1/go.mod h1:vahN+nz5GvN5O2RuN7mjI8/Ph8uzYUyVhJfUvD+TRqw=
 gitlab.ozon.ru/platform/errors v1.4.0 h1:s870YWiGhJCSdbr6ft/YYGshvk0ngRQS5y2wiLqs0YM=
 gitlab.ozon.ru/platform/errors v1.4.0/go.mod h1:vEOY+gy5yFz/JhLrvA2XCqIT58FYuv30kbAmPKWdh9g=
 gitlab.ozon.ru/platform/meshmd/v2 v2.6.1 h1:2G9PkmxGszszoOM6OGpJJVyGd2C645VeNxY0aliITLk=
 gitlab.ozon.ru/platform/meshmd/v2 v2.6.1/go.mod h1:29OiGgjq3Wj3KSJbBoIdDUvcvEk1gRYG2EbFncx6TSk=
 gitlab.ozon.ru/platform/metrics-go v1.6.5 h1:f/S9g6xtrSP/fSBjAJUbR7oZG+a7p+71ezsEiacDxQY=
 gitlab.ozon.ru/platform/metrics-go v1.6.5/go.mod h1:q3JpGg/uGlY2j/af/+fk5zIZnx0hjDYX13pUXBBrGjY=
+gitlab.ozon.ru/platform/metrics-go v1.6.7 h1:fLaAQZbCDC35js04Bvqlk2EGc8zLWMWrJ6AfKbMN10c=
+gitlab.ozon.ru/platform/metrics-go v1.6.7/go.mod h1:q3JpGg/uGlY2j/af/+fk5zIZnx0hjDYX13pUXBBrGjY=
 gitlab.ozon.ru/platform/mw/opts v1.0.0 h1:MZPijPilNKy1XDn4lnI0z4PzwlWeCHIyeuA/7XGRDMY=
 gitlab.ozon.ru/platform/mw/opts v1.0.0/go.mod h1:k0LiTr0eJjbp95BCH5QaIjbOxHzmXd6xsv9j++3bhd0=
 gitlab.ozon.ru/platform/redis-go v1.3.13 h1:ZIMZONxTwy7u6G/5EaVzbeZ6B767s02ieuW5zojp3Yk=
@@ -429,6 +435,8 @@ golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e/go.mod h1:RxMgew5VJxzue5/jJ
 golang.org/x/sync v0.0.0-20200317015054-43a5402ce75a/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
 golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
 golang.org/x/sync v0.0.0-20201207232520-09787c993a3a/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
+golang.org/x/sync v0.1.0 h1:wsuoTGHzEhffawBOhz5CYhcrV4IdKZbEyZjBMuTp12o=
+golang.org/x/sync v0.1.0/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
 golang.org/x/sys v0.0.0-20180727230415-bd9dbc187b6e/go.mod h1:STP8DvDyc/dI5b8T5hshtkjS+E42TnysNCUPdjciGhY=
 golang.org/x/sys v0.0.0-20180830151530-49385e6e1522/go.mod h1:STP8DvDyc/dI5b8T5hshtkjS+E42TnysNCUPdjciGhY=
 golang.org/x/sys v0.0.0-20180905080454-ebe1bf3edb33/go.mod h1:STP8DvDyc/dI5b8T5hshtkjS+E42TnysNCUPdjciGhY=
