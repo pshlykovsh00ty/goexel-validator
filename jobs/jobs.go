@@ -3,6 +3,7 @@ package jobs
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	goxlsx "gitlab.ozon.ru/express/platform/lib/go-xlsx"
@@ -43,6 +44,10 @@ type Entry struct {
 	PriceListID             goxlsx.String  `xlsx:"ID прайс-листа"`
 	JiraID                  goxlsx.String  `xlsx:"Заявка в JIRA"`
 	SoftErrors              goxlsx.String  `xlsx:"Ошибка"` //TODO нейминг можно поправить уже после рефакторинга, сейчас тут попадаются не только "не строгие" ошибки
+}
+
+func (e Entry) GetItemID() int64 {
+	return e.ItemID.Value
 }
 
 type SkuChecker struct {
@@ -230,5 +235,80 @@ func (j *FunValidation) GetID() platform.JobID {
 func (j *FunValidation) Create() platform.Job {
 	return &FunValidation{
 		JobWrapper: j.JobWrapper.Create(),
+	}
+}
+
+// ---------------------------------------------------------------- sorting  ----------------------------------------------------------------
+
+type Sorting struct {
+	*platform.JobWrapper
+}
+
+func (j *Sorting) Run(ctx context.Context) (err error) {
+	file := goexel.GetFileFromContext[Entry](ctx)
+	sort.Slice(file.Table, func(i, j int) bool {
+		return file.Table[i].ItemID.Value < file.Table[j].ItemID.Value
+	})
+	j.ResChan.Send(ctx, platform.JobResult{})
+	return nil
+}
+
+func (j *Sorting) GetDepIDs() []platform.JobID {
+	return nil
+}
+
+func (j *Sorting) GetID() platform.JobID {
+	return "Сортируем по скухам"
+}
+
+func (j *Sorting) Create() platform.Job {
+	return &Sorting{
+		JobWrapper: j.JobWrapper.Create(),
+	}
+}
+
+// ---------------------------------------------------------------- batch volume validation  ----------------------------------------------------------------
+
+type BatchVolumeValidation struct {
+	*platform.JobWrapper
+	privilegedClusters []string
+}
+
+func (j *BatchVolumeValidation) Run(ctx context.Context) (err error) {
+
+	clusterChan, exists := j.Dependencies["Относительный объем"]
+	if !exists {
+		return fmt.Errorf("%w: no cluster channel", platform.ErrFatal)
+	}
+	var (
+		clusterVolumes = make(map[string]int32, 10)
+	)
+	return platform.RunByItemBatch(ctx, j.JobWrapper, func(c context.Context, register *goexel.FileCellRegisterer, rows []*Entry) platform.JobResult {
+		for _, row := range rows {
+			jobResult := <-clusterChan
+			if jobResult.Err != nil {
+				return jobResult
+			}
+
+			cluster := jobResult.Res.(string)
+			clusterVolumes[cluster] += row.Volume.Value
+		}
+		// НУЖНО ДОДЕЛАТЬ
+		return platform.JobResult{}
+	})
+}
+
+func (j *BatchVolumeValidation) GetDepIDs() []platform.JobID {
+	return []platform.JobID{"Сортируем по скухам", "Валидация кластеров"}
+}
+
+func (j *BatchVolumeValidation) GetID() platform.JobID {
+	return "Относительный объем"
+}
+
+func (j *BatchVolumeValidation) Create() platform.Job {
+	return &BatchVolumeValidation{
+		privilegedClusters: j.privilegedClusters,
+		JobWrapper:         j.JobWrapper.Create(),
 	}
 }

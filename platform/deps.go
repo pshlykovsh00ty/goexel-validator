@@ -71,7 +71,7 @@ func (p JobPool) CreatePipeline(ctx context.Context, jobIDs []JobID) (res *Pipel
 			job.SetDependencyChan(depID, depChan)
 		}
 	}
-	return &Pipeline{sortedJobs: sortedJobWrappers}, nil
+	return &Pipeline{sortedRJobs: sortedJobWrappers}, nil
 }
 
 // FetchJobDeps - добавляет в глобальную мапу все недостающие, но необходимые подготовки и джобы

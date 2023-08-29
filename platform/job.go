@@ -41,7 +41,12 @@ func (j *JobWrapper) Create() (res *JobWrapper) {
 	return res
 }
 
-func RunByLine[T any](ctx context.Context, jw *JobWrapper, lineRunner func(c context.Context, register *goexel.FileCellRegisterer, row *T) JobResult) error {
+func RunByLine[T any](
+	ctx context.Context,
+	jw *JobWrapper,
+	lineRunner func(c context.Context, register *goexel.FileCellRegisterer, row *T) JobResult,
+) error {
+
 	file := goexel.GetFileFromContext[T](ctx)
 	for _, row := range file.Table {
 		res := lineRunner(ctx, file.CellRegister, row)
@@ -51,6 +56,38 @@ func RunByLine[T any](ctx context.Context, jw *JobWrapper, lineRunner func(c con
 			}
 		}
 		jw.Send(ctx, res)
+	}
+	return nil
+}
+
+type ItemIDGetter interface {
+	GetItemID() int64
+}
+
+func RunByItemBatch[T ItemIDGetter](
+	ctx context.Context,
+	jw *JobWrapper,
+	batchRunner func(c context.Context, register *goexel.FileCellRegisterer, rows []*T) JobResult,
+) error {
+
+	file := goexel.GetFileFromContext[T](ctx)
+	if len(file.Table) == 0 {
+		return nil
+	}
+	end := 0
+	for i := 0; i < len(file.Table); i++ {
+		for end+1 < len(file.Table) && (*file.Table[end]).GetItemID() == (*file.Table[end+1]).GetItemID() {
+			end++
+		}
+		end++
+		res := batchRunner(ctx, file.CellRegister, file.Table[i:end])
+		if res.Err != nil {
+			if errors.Is(res.Err, ErrFatal) {
+				return res.Err
+			}
+		}
+		jw.Send(ctx, res)
+		i = end
 	}
 	return nil
 }

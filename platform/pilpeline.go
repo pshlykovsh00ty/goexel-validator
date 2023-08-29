@@ -13,7 +13,8 @@ var (
 )
 
 type Pipeline struct {
-	sortedJobs []Job
+	sortedRJobs []Job
+	sortedWJobs []Job
 }
 
 // Start - стартует весь пайплайн из джоб
@@ -26,6 +27,15 @@ func (p *Pipeline) Start(ctx context.Context, concurrencyLimit int32) (fatalErr 
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+
+	for _, wjob := range p.sortedWJobs {
+		err := wjob.Run(ctx)
+		if errors.Is(err, ErrFatal) {
+			logger.Errorf(ctx, "fatal validation error: %v", err)
+			return
+		}
+		logger.Errorf(ctx, "job error: %v", err)
+	}
 
 	// пускаем пул с некоторым ограничением по горутинам
 	for i := int32(0); i < concurrencyLimit; i++ {
@@ -49,7 +59,7 @@ func (p *Pipeline) Start(ctx context.Context, concurrencyLimit int32) (fatalErr 
 					<-jobsOnline
 					if err != nil {
 						if errors.Is(err, ErrFatal) {
-							logger.Errorf(ctx, "fatal validation error")
+							logger.Errorf(ctx, "fatal validation error: %v", err)
 							fatalErr = err
 							cancel()
 							return
@@ -64,7 +74,7 @@ func (p *Pipeline) Start(ctx context.Context, concurrencyLimit int32) (fatalErr 
 	}
 
 	// rate limiting
-	for _, job := range p.sortedJobs {
+	for _, job := range p.sortedRJobs {
 		select {
 		case <-ctx.Done():
 			if fatalErr != nil {
