@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"time"
+	"strings"
 
 	goxlsx "gitlab.ozon.ru/express/platform/lib/go-xlsx"
 	"gitlab.ozon.ru/validator/goexel"
@@ -90,6 +90,10 @@ func (j *SkuChecker) GetID() platform.JobID {
 	return "СКУ В МАПЕ ЧЕКЕР"
 }
 
+func (j *SkuChecker) GetType() platform.JobType {
+	return platform.Common
+}
+
 func (j *SkuChecker) Create() platform.Job {
 	return &SkuChecker{
 		JobWrapper: j.JobWrapper.Create(),
@@ -106,9 +110,6 @@ type IsSkuValid struct {
 func (j *IsSkuValid) Run(ctx context.Context) (err error) {
 
 	return platform.RunByLine[Entry](ctx, j.JobWrapper, func(c context.Context, register *goexel.FileCellRegisterer, row *Entry) platform.JobResult {
-
-		time.Sleep(20 * time.Millisecond)
-
 		isEmpty := row.ItemID.IsEmpty() || row.ItemID.Value == 1
 		if isEmpty {
 			register.RegisterCellValueByString([]string{"Пустой Ску."}, row.Comment)
@@ -127,6 +128,10 @@ func (j *IsSkuValid) GetID() platform.JobID {
 	return "Валидный ли Ску"
 }
 
+func (j *IsSkuValid) GetType() platform.JobType {
+	return platform.Common
+}
+
 func (j *IsSkuValid) Create() platform.Job {
 	return &IsSkuValid{
 		JobWrapper: j.JobWrapper.Create(),
@@ -142,8 +147,6 @@ type DataValidation struct {
 func (j *DataValidation) Run(ctx context.Context) (err error) {
 
 	return platform.RunByLine[Entry](ctx, j.JobWrapper, func(c context.Context, register *goexel.FileCellRegisterer, row *Entry) platform.JobResult {
-
-		time.Sleep(20 * time.Millisecond)
 		rowNumber := row.PromoName.GetRowNumber()
 
 		if !row.PromoDateFrom.IsValid() {
@@ -171,6 +174,10 @@ func (j *DataValidation) GetDepIDs() []platform.JobID {
 
 func (j *DataValidation) GetID() platform.JobID {
 	return "Влидация дат начала и конца промо акции"
+}
+
+func (j *DataValidation) GetType() platform.JobType {
+	return platform.Common
 }
 
 func (j *DataValidation) Create() platform.Job {
@@ -232,6 +239,10 @@ func (j *FunValidation) GetID() platform.JobID {
 	return "Проверяем двойные зависимости"
 }
 
+func (j *FunValidation) GetType() platform.JobType {
+	return platform.Common
+}
+
 func (j *FunValidation) Create() platform.Job {
 	return &FunValidation{
 		JobWrapper: j.JobWrapper.Create(),
@@ -249,7 +260,8 @@ func (j *Sorting) Run(ctx context.Context) (err error) {
 	sort.Slice(file.Table, func(i, j int) bool {
 		return file.Table[i].ItemID.Value < file.Table[j].ItemID.Value
 	})
-	j.ResChan.Send(ctx, platform.JobResult{})
+	// пишущая джоба не отправляет никому ничего, но можно сделать для профилактики отправкуы
+	j.Send(ctx, platform.JobResult{})
 	return nil
 }
 
@@ -259,6 +271,10 @@ func (j *Sorting) GetDepIDs() []platform.JobID {
 
 func (j *Sorting) GetID() platform.JobID {
 	return "Сортируем по скухам"
+}
+
+func (j *Sorting) GetType() platform.JobType {
+	return platform.Writer
 }
 
 func (j *Sorting) Create() platform.Job {
@@ -271,29 +287,61 @@ func (j *Sorting) Create() platform.Job {
 
 type BatchVolumeValidation struct {
 	*platform.JobWrapper
-	privilegedClusters []string
+	PrivilegedClusters map[string]struct{}
 }
 
 func (j *BatchVolumeValidation) Run(ctx context.Context) (err error) {
 
-	clusterChan, exists := j.Dependencies["Относительный объем"]
+	clusterChan, exists := j.Dependencies["Валидация кластеров"]
 	if !exists {
 		return fmt.Errorf("%w: no cluster channel", platform.ErrFatal)
 	}
 	var (
-		clusterVolumes = make(map[string]int32, 10)
+		clusterVolumes  = make(map[string]int32, 10)
+		wrongPrivileged = make([]string, 0, 2)
 	)
 	return platform.RunByItemBatch(ctx, j.JobWrapper, func(c context.Context, register *goexel.FileCellRegisterer, rows []*Entry) platform.JobResult {
 		for _, row := range rows {
 			jobResult := <-clusterChan
 			if jobResult.Err != nil {
-				return jobResult
+				continue
 			}
 
 			cluster := jobResult.Res.(string)
 			clusterVolumes[cluster] += row.Volume.Value
 		}
-		// НУЖНО ДОДЕЛАТЬ
+
+		for cluster, vol := range clusterVolumes {
+
+			if _, exists := j.PrivilegedClusters[cluster]; exists {
+				continue
+			}
+			for pc := range j.PrivilegedClusters {
+				pvol, exists := clusterVolumes[pc]
+				if !exists {
+					continue
+				}
+				if vol > pvol {
+					wrongPrivileged = append(wrongPrivileged, pc)
+				}
+			}
+			if len(wrongPrivileged) != 0 {
+				for _, row := range rows {
+					if row.WhcClusterName.Value == cluster {
+						register.RegisterCellValueByString([]string{
+							fmt.Sprintf(
+								"%s имеет объем больше чем в %s",
+								cluster, strings.Join(wrongPrivileged, ", "),
+							),
+						}, row.SoftErrors)
+					}
+				}
+			}
+			wrongPrivileged = wrongPrivileged[:0]
+		}
+		for k := range clusterVolumes {
+			delete(clusterVolumes, k)
+		}
 		return platform.JobResult{}
 	})
 }
@@ -306,9 +354,58 @@ func (j *BatchVolumeValidation) GetID() platform.JobID {
 	return "Относительный объем"
 }
 
+func (j *BatchVolumeValidation) GetType() platform.JobType {
+	return platform.Common
+}
+
 func (j *BatchVolumeValidation) Create() platform.Job {
 	return &BatchVolumeValidation{
-		privilegedClusters: j.privilegedClusters,
+		PrivilegedClusters: j.PrivilegedClusters,
 		JobWrapper:         j.JobWrapper.Create(),
+	}
+}
+
+// ---------------------------------------------------------------- cluster validation  ----------------------------------------------------------------
+
+type IsClusterValid struct {
+	*platform.JobWrapper
+
+	ValidClusters map[string]struct{}
+}
+
+func (j *IsClusterValid) Run(ctx context.Context) (err error) {
+
+	return platform.RunByLine[Entry](ctx, j.JobWrapper, func(c context.Context, register *goexel.FileCellRegisterer, row *Entry) platform.JobResult {
+
+		if !row.WhcClusterName.IsEmpty() && row.WhcClusterName.IsValid() {
+			if _, exists := j.ValidClusters[row.WhcClusterName.Value]; exists {
+				return platform.JobResult{
+					Res: row.WhcClusterName.Value,
+				}
+			}
+		}
+		register.RegisterCommentByValue(&row.WhcClusterName, "Невалидный кластер")
+		return platform.JobResult{
+			Err: platform.ErrSkipped,
+		}
+	})
+}
+
+func (j *IsClusterValid) GetDepIDs() []platform.JobID {
+	return nil
+}
+
+func (j *IsClusterValid) GetID() platform.JobID {
+	return "Валидация кластеров"
+}
+
+func (j *IsClusterValid) GetType() platform.JobType {
+	return platform.Common
+}
+
+func (j *IsClusterValid) Create() platform.Job {
+	return &IsClusterValid{
+		JobWrapper:    j.JobWrapper.Create(),
+		ValidClusters: j.ValidClusters,
 	}
 }

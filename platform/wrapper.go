@@ -7,6 +7,17 @@ import (
 	"gitlab.ozon.ru/validator/goexel"
 )
 
+var (
+	ErrSkipped = errors.New("skipped this line")
+)
+
+type Broadcaster[T any] interface {
+	Creator[Broadcaster[T]]
+	Sub() chan T
+	Send(context.Context, T)
+	Close()
+}
+
 type JobWrapper struct {
 	ResChan      Broadcaster[JobResult]
 	Dependencies map[JobID]chan JobResult
@@ -75,7 +86,7 @@ func RunByItemBatch[T ItemIDGetter](
 		return nil
 	}
 	end := 0
-	for i := 0; i < len(file.Table); i++ {
+	for i := 0; i < len(file.Table); {
 		for end+1 < len(file.Table) && (*file.Table[end]).GetItemID() == (*file.Table[end+1]).GetItemID() {
 			end++
 		}

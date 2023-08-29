@@ -2,10 +2,14 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
+	"log"
 	"os"
+	"strings"
 	"time"
 
+	"github.com/fatih/color"
 	"gitlab.ozon.ru/platform/tracer-go/logger"
 	"gitlab.ozon.ru/validator/broadcaster"
 	"gitlab.ozon.ru/validator/goexel"
@@ -13,10 +17,25 @@ import (
 	"gitlab.ozon.ru/validator/platform"
 )
 
+var boundedStrLayout = "-----------------------\n%s\n--------------------------------\n"
+
 func main() {
+	log.Default().SetFlags(log.Ltime)
+	if len(os.Args) < 2 {
+		log.Fatalf("usage: %s ", color.HiMagentaString("/path/to/file.xlsx"))
+	}
+	os.Args = append(os.Args, "--local-config-enabled")
+
+	filepath := os.Args[1]
+	//nolint:gosec
+	validationFile, err := os.Open(filepath)
+	if err != nil {
+		log.Fatalf("failed to open %s: %s", filepath, color.RedString(err.Error()))
+	}
+	log.Printf(boundedStrLayout, color.YellowString("start app initialization"))
 	ctx := context.Background()
 
-	plat := platform.NewPlatform(2, time.Minute, platform.JobPool{
+	plat := platform.NewPlatform(time.Minute, platform.JobPool{
 		JobMap: make(map[platform.JobID]platform.Job),
 	})
 	// доделать
@@ -48,21 +67,72 @@ func main() {
 	}
 	plat.AddJob(funValidator)
 
-	f, err := os.Open("/Users/pshlykov/Downloads/9ffda052-bfb5-409f-9b3c-b00f447d9400.xlsx")
-	if err != nil {
-		logger.Fatal(ctx, "failed to open file: %v", err)
+	sorting := &jobs.Sorting{
+		JobWrapper: &platform.JobWrapper{ResChan: &broadcaster.Broadcaster[platform.JobResult]{}},
 	}
-	bytes, _ := io.ReadAll(f)
+	plat.AddJob(sorting)
 
+	batchVolumeValidation := &jobs.BatchVolumeValidation{
+		JobWrapper: &platform.JobWrapper{ResChan: &broadcaster.Broadcaster[platform.JobResult]{}},
+		PrivilegedClusters: map[string]struct{}{
+			"Москва и область":          {},
+			"Санкт-Петербург и область": {},
+		},
+	}
+	plat.AddJob(batchVolumeValidation)
+
+	clusterValidation := &jobs.IsClusterValid{
+		JobWrapper: &platform.JobWrapper{ResChan: &broadcaster.Broadcaster[platform.JobResult]{}},
+		ValidClusters: map[string]struct{}{
+			"ФФ БО":            {},
+			"Федеральный":      {},
+			"Тверь":            {},
+			"Москва и область": {},
+			"Набережные Челны": {},
+			"Казань":           {},
+			"Санкт-Петербург и область": {},
+			"Краснодар":                 {},
+			"Волгоград":                 {},
+			"Сочи":                      {},
+			"Ростов":                    {},
+		},
+	}
+	plat.AddJob(clusterValidation)
+
+	start := time.Now()
+
+	bytes, _ := io.ReadAll(validationFile)
 	ff, err := goexel.NewFile[jobs.Entry](bytes)
 	if err != nil {
 		logger.Fatal(ctx, "failed to decode file: %v", err)
 	}
-	ff.CellRegister.SetSheet("Sheet1")
+	ff.CellRegister.SetSheet(ff.Table[0].PromoName.GetSheetName())
 
 	ctx = goexel.SetFileContext(ctx, ff)
-	plat.Run(ctx, []platform.JobID{funValidator.GetID(), skuChecker.GetID()})
+	err = plat.Run(ctx, []platform.JobID{funValidator.GetID(), skuChecker.GetID(), batchVolumeValidation.GetID()})
+	if err != nil {
+		log.Fatalf(color.RedString("failed to validate file: ") + err.Error())
+	}
 
-	newF := ff.CellRegister.GetFileBytes()
-	os.WriteFile("/Users/pshlykov/Downloads/testing.xlsx", newF, 0666)
+	timeElapsed := time.Since(start).Seconds()
+	timeStr := color.GreenString("%f", timeElapsed)
+	if timeElapsed > 120 {
+		timeStr = color.RedString("%f", timeElapsed)
+	} else if timeElapsed > 60 {
+		timeStr = color.YellowString("%f", timeElapsed)
+	} else if timeElapsed > 40 {
+		timeStr = color.BlueString("%f", timeElapsed)
+	}
+
+	log.Printf(boundedStrLayout, fmt.Sprintf("end of validation:\ntime is:  %s", timeStr))
+	fileWithComments := ff.CellRegister.GetFileBytes()
+	if fileWithComments != nil {
+		destFile := fmt.Sprintf("%s_new_val_comm.xlsx", strings.TrimSuffix(filepath, ".xlsx"))
+		//nolint:gosec
+		if err = os.WriteFile(destFile, fileWithComments, 0666); err != nil {
+			log.Fatalf("failed to save file with comments: %v", color.RedString(err.Error()))
+		}
+		log.Printf("file has been saved to %s ", color.BlackString(destFile))
+	}
+
 }
