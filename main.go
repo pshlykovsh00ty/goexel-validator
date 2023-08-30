@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"os"
 	"strings"
 	"time"
@@ -109,9 +110,64 @@ func main() {
 	ff.CellRegister.SetSheet(ff.Table[0].PromoName.GetSheetName())
 
 	ctx = goexel.SetFileContext(ctx, ff)
-	err = plat.Run(ctx, []platform.JobID{funValidator.GetID(), skuChecker.GetID(), batchVolumeValidation.GetID()})
+	pipline, err := plat.NewPipeline(ctx,
+		[]platform.JobID{
+			funValidator.GetID(),
+			skuChecker.GetID(),
+			batchVolumeValidation.GetID(),
+		})
+	if err != nil {
+		log.Fatalf(color.RedString("failed to create pipeline: ") + err.Error())
+	}
+	ctx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+	go func() {
+		count := 300
+		ticker := time.NewTicker(2 * time.Millisecond)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				min := math.MaxFloat32
+				prog := pipline.GetProgress(len(ff.Table))
+				for _, p := range prog {
+					if p < min && p != 0 {
+						min = p
+					}
+				}
+
+				l := int(float64(count) * min)
+				if l <= 0 {
+					l = 1
+				}
+				ost := count - l
+
+				fmt.Print("\033[G\033[K")
+				fmt.Printf("\n%s%s",
+					color.New(color.BgGreen, color.FgHiGreen).Sprint(strings.Repeat(" ", l)),
+					color.New(color.BgBlack).Sprint(strings.Repeat(" ", ost)),
+				)
+				fmt.Print("\033[A")
+			}
+		}
+	}()
+
+	err = pipline.Start(ctx)
 	if err != nil {
 		log.Fatalf(color.RedString("failed to validate file: ") + err.Error())
+	}
+	cancel()
+	fmt.Printf("\n\n")
+
+	fileWithComments := ff.CellRegister.GetFileBytes()
+	if fileWithComments != nil {
+		destFile := fmt.Sprintf("%s_new_val_comm.xlsx", strings.TrimSuffix(filepath, ".xlsx"))
+		//nolint:gosec
+		if err = os.WriteFile(destFile, fileWithComments, 0666); err != nil {
+			log.Fatalf("failed to save file with comments: %v", color.RedString(err.Error()))
+		}
+		log.Printf("file has been saved to %s ", color.BlackString(destFile))
 	}
 
 	timeElapsed := time.Since(start).Seconds()
@@ -125,14 +181,4 @@ func main() {
 	}
 
 	log.Printf(boundedStrLayout, fmt.Sprintf("end of validation:\ntime is:  %s", timeStr))
-	fileWithComments := ff.CellRegister.GetFileBytes()
-	if fileWithComments != nil {
-		destFile := fmt.Sprintf("%s_new_val_comm.xlsx", strings.TrimSuffix(filepath, ".xlsx"))
-		//nolint:gosec
-		if err = os.WriteFile(destFile, fileWithComments, 0666); err != nil {
-			log.Fatalf("failed to save file with comments: %v", color.RedString(err.Error()))
-		}
-		log.Printf("file has been saved to %s ", color.BlackString(destFile))
-	}
-
 }

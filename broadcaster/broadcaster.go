@@ -3,6 +3,7 @@ package broadcaster
 import (
 	"context"
 
+	"github.com/pkg/errors"
 	"gitlab.ozon.ru/validator/platform"
 )
 
@@ -19,14 +20,15 @@ func (b *Broadcaster[T]) Sub() chan T {
 	return ch
 }
 
-func (b *Broadcaster[T]) Send(ctx context.Context, obj T) {
+func (b *Broadcaster[T]) Send(ctx context.Context, obj T) error {
 	for _, ch := range b.casts {
 		select {
 		case <-ctx.Done():
-			continue
+			return errors.Wrap(platform.ErrFatal, ctx.Err().Error())
 		case ch <- obj:
 		}
 	}
+	return nil
 }
 
 func (b *Broadcaster[T]) Close() {

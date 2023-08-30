@@ -32,12 +32,11 @@ func (p *Platform) AddJob(j Job) error {
 	return nil
 }
 
-func (p Platform) Run(ctx context.Context, jobs []JobID) error {
+func (p Platform) NewPipeline(ctx context.Context, jobs []JobID) (*Pipeline, error) {
 	pipeLine, err := p.jobPool.CreatePipeline(ctx, jobs)
 	if err != nil {
-		return errors.Wrap(err, "failed to create pipeline")
+		return nil, errors.Wrap(err, "failed to create pipeline")
 	}
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
-	defer cancel()
-	return pipeLine.Start(ctx)
+
+	return pipeLine, nil
 }

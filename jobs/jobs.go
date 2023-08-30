@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	goxlsx "gitlab.ozon.ru/express/platform/lib/go-xlsx"
 	"gitlab.ozon.ru/validator/goexel"
@@ -59,10 +60,7 @@ type SkuChecker struct {
 
 func (j *SkuChecker) Run(ctx context.Context) (err error) {
 
-	checkerResChan, ok := j.Dependencies["Валидный ли Ску"]
-	if !ok {
-		return fmt.Errorf("%w: no checker chanel", platform.ErrFatal)
-	}
+	checkerResChan := j.Dependencies["Валидный ли Ску"]
 
 	return platform.RunByLine[Entry](ctx, j.JobWrapper, func(c context.Context, register *goexel.FileCellRegisterer, row *Entry) platform.JobResult {
 		checkerRes := checkerResChan.Recv(ctx)
@@ -110,6 +108,7 @@ type IsSkuValid struct {
 func (j *IsSkuValid) Run(ctx context.Context) (err error) {
 
 	return platform.RunByLine[Entry](ctx, j.JobWrapper, func(c context.Context, register *goexel.FileCellRegisterer, row *Entry) platform.JobResult {
+		time.Sleep(time.Millisecond)
 		isEmpty := row.ItemID.IsEmpty() || row.ItemID.Value == 1
 		if isEmpty {
 			register.RegisterCellValueByString([]string{"Пустой Ску."}, row.Comment)
@@ -194,18 +193,10 @@ type FunValidation struct {
 
 func (j *FunValidation) Run(ctx context.Context) (err error) {
 
-	isValidSkuChan, ok := j.Dependencies["Валидный ли Ску"]
-	if !ok {
-		return fmt.Errorf("%w: no checker chanel", platform.ErrFatal)
-	}
-
-	dataChekerChan, ok := j.Dependencies["Влидация дат начала и конца промо акции"]
-	if !ok {
-		return fmt.Errorf("%w: no date validation chanel", platform.ErrFatal)
-	}
+	isValidSkuChan := j.Dependencies["Валидный ли Ску"]
+	dataChekerChan := j.Dependencies["Влидация дат начала и конца промо акции"]
 
 	return platform.RunByLine[Entry](ctx, j.JobWrapper, func(c context.Context, register *goexel.FileCellRegisterer, row *Entry) platform.JobResult {
-
 		isValidSkuRes := isValidSkuChan.Recv(ctx)
 		if isValidSkuRes.Err != nil {
 			return isValidSkuRes
@@ -261,8 +252,7 @@ func (j *Sorting) Run(ctx context.Context) (err error) {
 		return file.Table[i].ItemID.Value < file.Table[j].ItemID.Value
 	})
 	// пишущая джоба не отправляет никому ничего, но можно сделать для профилактики отправкуы
-	j.Send(ctx, platform.JobResult{})
-	return nil
+	return j.Send(ctx, platform.JobResult{})
 }
 
 func (j *Sorting) GetDepIDs() []platform.JobID {
@@ -292,11 +282,8 @@ type BatchVolumeValidation struct {
 
 func (j *BatchVolumeValidation) Run(ctx context.Context) (err error) {
 
-	clusterChan, exists := j.Dependencies["Валидация кластеров"]
-	if !exists {
-		return fmt.Errorf("%w: no cluster channel", platform.ErrFatal)
-	}
 	var (
+		clusterChan     = j.Dependencies["Валидация кластеров"]
 		clusterVolumes  = make(map[string]int32, 10)
 		wrongPrivileged = make([]string, 0, 2)
 	)
@@ -379,7 +366,7 @@ type IsClusterValid struct {
 func (j *IsClusterValid) Run(ctx context.Context) (err error) {
 
 	return platform.RunByLine[Entry](ctx, j.JobWrapper, func(c context.Context, register *goexel.FileCellRegisterer, row *Entry) platform.JobResult {
-
+		time.Sleep(time.Millisecond)
 		if !row.WhcClusterName.IsEmpty() && row.WhcClusterName.IsValid() {
 			if _, exists := j.ValidClusters[row.WhcClusterName.Value]; exists {
 				return platform.JobResult{
