@@ -6,7 +6,7 @@ import (
 	"gitlab.ozon.ru/validator/platform"
 )
 
-const buffer int = 1024
+const buffer int = 0
 
 type Broadcaster[T any] struct {
 	casts []chan T

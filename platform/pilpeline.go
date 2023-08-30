@@ -39,7 +39,8 @@ type JobResult struct {
 type Job interface {
 	Runner
 	Subscribe() chan JobResult
-	SetDependencyChan(depID JobID, ch chan JobResult)
+	SetDependencyChan(depID JobID, ch Chan)
+	Close()
 
 	// Чтобы правильно сделать широковещательную рассылку
 	// сделаем фабрику раннеров тк есть Create у раннера
@@ -74,6 +75,7 @@ func (p *Pipeline) Start(ctx context.Context) (err error) {
 	for _, job := range p.rJobs {
 		job := job
 		group.Go(func() error {
+			defer job.Close()
 			if err := job.Run(ctx); err != nil {
 				if errors.Is(err, ErrFatal) {
 					logger.Errorf(ctx, "fatal validation error: %v", err)
@@ -227,7 +229,7 @@ func (p JobPool) CreatePipeline(ctx context.Context, jobIDs []JobID) (res *Pipel
 				continue
 			}
 			depChan := dep.Subscribe()
-			job.SetDependencyChan(depID, depChan)
+			job.SetDependencyChan(depID, Chan{depChan})
 		}
 		pipe.rJobs = append(pipe.rJobs, job)
 	}

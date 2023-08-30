@@ -2,6 +2,7 @@ package jobs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -64,10 +65,9 @@ func (j *SkuChecker) Run(ctx context.Context) (err error) {
 	}
 
 	return platform.RunByLine[Entry](ctx, j.JobWrapper, func(c context.Context, register *goexel.FileCellRegisterer, row *Entry) platform.JobResult {
-		checkerRes := <-checkerResChan
-
+		checkerRes := checkerResChan.Recv(ctx)
 		if checkerRes.Err != nil {
-			return platform.JobResult{Err: platform.ErrSkipped}
+			return checkerRes
 		}
 		if isValidSKU := checkerRes.Res.(bool); !isValidSKU {
 			register.RegisterCellValueByString([]string{"Знаю что 1."}, row.Comment)
@@ -206,14 +206,14 @@ func (j *FunValidation) Run(ctx context.Context) (err error) {
 
 	return platform.RunByLine[Entry](ctx, j.JobWrapper, func(c context.Context, register *goexel.FileCellRegisterer, row *Entry) platform.JobResult {
 
-		isValidSkuRes := <-isValidSkuChan
+		isValidSkuRes := isValidSkuChan.Recv(ctx)
 		if isValidSkuRes.Err != nil {
 			return isValidSkuRes
 		}
 		isValidSku := isValidSkuRes.Res.(bool)
 
 		if isValidSku {
-			isVaidDataRes := <-dataChekerChan
+			isVaidDataRes := dataChekerChan.Recv(ctx)
 			if isVaidDataRes.Err != nil {
 				return isVaidDataRes
 			}
@@ -302,8 +302,11 @@ func (j *BatchVolumeValidation) Run(ctx context.Context) (err error) {
 	)
 	return platform.RunByItemBatch(ctx, j.JobWrapper, func(c context.Context, register *goexel.FileCellRegisterer, rows []*Entry) platform.JobResult {
 		for _, row := range rows {
-			jobResult := <-clusterChan
+			jobResult := clusterChan.Recv(ctx)
 			if jobResult.Err != nil {
+				if errors.Is(jobResult.Err, platform.ErrFatal) {
+					return jobResult
+				}
 				continue
 			}
 

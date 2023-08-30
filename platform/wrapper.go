@@ -18,9 +18,29 @@ type Broadcaster[T any] interface {
 	Close()
 }
 
+type Chan struct {
+	ch chan JobResult
+}
+
+func (c Chan) Recv(ctx context.Context) JobResult {
+	select {
+	case <-ctx.Done():
+		return JobResult{Err: errors.Wrap(ErrFatal, ctx.Err().Error())}
+	case res, ok := <-c.ch:
+		if !ok {
+			if res.Err != nil {
+				res.Err = errors.Wrap(res.Err, "recv chan is closed")
+			} else {
+				res.Err = errors.New("recv chan is closed")
+			}
+		}
+		return res
+	}
+}
+
 type JobWrapper struct {
 	ResChan      Broadcaster[JobResult]
-	Dependencies map[JobID]chan JobResult
+	Dependencies map[JobID]Chan
 }
 
 // Subscribe - если хочешь читать мои результаты, то подписывайся и жди их в этом канале
@@ -29,7 +49,7 @@ func (j *JobWrapper) Subscribe() chan JobResult {
 }
 
 // SetDependencyChan - запоминает канал в который будет писать зависимость с ID = depID
-func (j *JobWrapper) SetDependencyChan(depID JobID, ch chan JobResult) {
+func (j *JobWrapper) SetDependencyChan(depID JobID, ch Chan) {
 	j.Dependencies[depID] = ch
 }
 
@@ -41,13 +61,17 @@ func (j *JobWrapper) SendEmptyErrorRes(ctx context.Context) {
 	j.ResChan.Send(ctx, JobResult{Err: ErrSkipped})
 }
 
+func (j *JobWrapper) SendError(ctx context.Context, err error) {
+	j.ResChan.Send(ctx, JobResult{Err: err})
+}
+
 func (j *JobWrapper) Close() {
 	j.ResChan.Close()
 }
 
 func (j *JobWrapper) Create() (res *JobWrapper) {
 	res = new(JobWrapper)
-	res.Dependencies = map[JobID]chan JobResult{}
+	res.Dependencies = map[JobID]Chan{}
 	res.ResChan = j.ResChan.Create()
 	return res
 }
