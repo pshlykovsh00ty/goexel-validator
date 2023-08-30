@@ -55,13 +55,22 @@ var (
 	ErrFatal = errors.New("fatal job error")
 )
 
+type PipelineID string
+
 type Pipeline struct {
-	rJobs []Job
-	wJobs []Job
+	rJobs   []Job
+	wJobs   []Job
+	id      PipelineID
+	fileLen int
+}
+
+func (p Pipeline) GetID() PipelineID {
+	return p.id
 }
 
 // Start - стартует весь пайплайн из джоб
-func (p *Pipeline) Start(ctx context.Context) (err error) {
+func (p *Pipeline) start(ctx context.Context) (err error) {
+
 	// запускаем пишушщие джобы поочередно, чтобы не было гонок
 	// их резы никто не ждет
 	for _, wjob := range p.wJobs {
@@ -98,17 +107,6 @@ func (p *Pipeline) Start(ctx context.Context) (err error) {
 	return group.Wait()
 }
 
-func (p *Pipeline) GetProgress(fileLen int) (res map[JobID]float64) {
-	res = make(map[JobID]float64, len(p.wJobs)+len(p.rJobs))
-	for _, job := range p.wJobs {
-		res[job.GetID()] = float64(job.GetProgress()) / float64(fileLen)
-	}
-	for _, job := range p.rJobs {
-		res[job.GetID()] = float64(job.GetProgress()) / float64(fileLen)
-	}
-	return res
-}
-
 type JobPool struct {
 	JobMap map[JobID]Job
 }
@@ -123,7 +121,7 @@ func (p JobPool) Get(jobID JobID) (Job, bool) {
 }
 
 // CreatePipeline - из id джоб собирает цепочку готовых к запуску джоб
-func (p JobPool) CreatePipeline(ctx context.Context, jobIDs []JobID) (res *Pipeline, err error) {
+func (p JobPool) createPipeline(ctx context.Context, jobIDs []JobID) (res *Pipeline, err error) {
 	// jobs сет необходимых для конфигурации пайплайна джоб
 	jobs := make(map[JobID]Job, len(jobIDs))
 
@@ -289,4 +287,17 @@ func (e *ConfigurationError) Error() string {
 		return res[:len(res)-4] + colorfmt.YellowString(")")
 	}
 	return "Неизвестная ошибка"
+}
+
+type PipelineProgress map[JobID]float64
+
+func (p *Pipeline) getProgress() (res PipelineProgress) {
+	res = make(map[JobID]float64, len(p.wJobs)+len(p.rJobs))
+	for _, job := range p.wJobs {
+		res[job.GetID()] = float64(job.GetProgress()) / float64(p.fileLen)
+	}
+	for _, job := range p.rJobs {
+		res[job.GetID()] = float64(job.GetProgress()) / float64(p.fileLen)
+	}
+	return res
 }

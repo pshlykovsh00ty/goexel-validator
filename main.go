@@ -110,50 +110,24 @@ func main() {
 	ff.CellRegister.SetSheet(ff.Table[0].PromoName.GetSheetName())
 
 	ctx = goexel.SetFileContext(ctx, ff)
-	pipline, err := plat.NewPipeline(ctx,
+
+	pipeline, err := plat.NewPipeline(ctx,
 		[]platform.JobID{
 			funValidator.GetID(),
 			skuChecker.GetID(),
 			batchVolumeValidation.GetID(),
-		})
+		},
+		len(ff.Table),
+	)
 	if err != nil {
 		log.Fatalf(color.RedString("failed to create pipeline: ") + err.Error())
 	}
-	ctx, cancel := context.WithTimeout(ctx, time.Minute)
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	go func() {
-		count := 300
-		ticker := time.NewTicker(2 * time.Millisecond)
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				min := math.MaxFloat32
-				prog := pipline.GetProgress(len(ff.Table))
-				for _, p := range prog {
-					if p < min && p != 0 {
-						min = p
-					}
-				}
 
-				l := int(float64(count) * min)
-				if l <= 0 {
-					l = 1
-				}
-				ost := count - l
+	go printStat(ctx, plat, pipeline.GetID())
 
-				fmt.Print("\033[G\033[K")
-				fmt.Printf("\n%s%s",
-					color.New(color.BgGreen, color.FgHiGreen).Sprint(strings.Repeat(" ", l)),
-					color.New(color.BgBlack).Sprint(strings.Repeat(" ", ost)),
-				)
-				fmt.Print("\033[A")
-			}
-		}
-	}()
-
-	err = pipline.Start(ctx)
+	err = plat.StartPipeline(ctx, pipeline)
 	if err != nil {
 		log.Fatalf(color.RedString("failed to validate file: ") + err.Error())
 	}
@@ -181,4 +155,39 @@ func main() {
 	}
 
 	log.Printf(boundedStrLayout, fmt.Sprintf("end of validation:\ntime is:  %s", timeStr))
+}
+
+func printStat(ctx context.Context, p *platform.Platform, pipeID platform.PipelineID) {
+	count := 200
+	ticker := time.NewTicker(2 * time.Millisecond)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			min := math.MaxFloat32
+			prog, err := p.GetProgress(pipeID)
+			if err != nil {
+				logger.Errorf(ctx, "failed to get validation progress: %w", err)
+			}
+			for _, p := range prog {
+				if p < min && p != 0 {
+					min = p
+				}
+			}
+
+			l := int(float64(count) * min)
+			if l <= 0 {
+				l = 1
+			}
+			ost := count - l
+
+			fmt.Print("\033[G\033[K")
+			fmt.Printf("\n%s%s",
+				color.New(color.BgGreen, color.FgHiGreen).Sprint(strings.Repeat(" ", l)),
+				color.New(color.BgBlack).Sprint(strings.Repeat(" ", ost)),
+			)
+			fmt.Print("\033[A")
+		}
+	}
 }
